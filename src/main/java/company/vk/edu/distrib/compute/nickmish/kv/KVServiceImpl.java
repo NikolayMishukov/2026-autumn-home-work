@@ -1,8 +1,8 @@
-package company.vk.edu.distrib.compute.nickmish.urlshortener;
+package company.vk.edu.distrib.compute.nickmish.kv;
 
 import com.sun.net.httpserver.HttpServer;
 import company.vk.edu.distrib.compute.Dao;
-import company.vk.edu.distrib.compute.urlshortener.UrlShortenerService;
+import company.vk.edu.distrib.compute.kv.KVService;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -15,32 +15,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public final class UrlShortener implements UrlShortenerService {
+public final class KVServiceImpl implements KVService {
     private final int port;
     private final Lock lock = new ReentrantLock();
     private boolean startCalled;
     private boolean stopCalled;
     @Nullable private HttpServer server;
     @Nullable private ExecutorService executor;
-    @Nullable private FileStringDao linkDao;
-    @Nullable private FileStringDao userDao;
-    @Nullable private Dao<String> injectedLinksDao;
+    @Nullable private Dao<byte[]> dao;
 
-    public UrlShortener(int port) {
+    public KVServiceImpl(int port) {
         this.port = port;
-    }
-
-    @Override
-    public void setLinksDao(Dao<String> dao) {
-        lock.lock();
-        try {
-            if (startCalled || stopCalled) {
-                throw new IllegalStateException("Links dao can only be injected before start");
-            }
-            injectedLinksDao = dao;
-        } finally {
-            lock.unlock();
-        }
     }
 
     @Override
@@ -52,23 +37,15 @@ public final class UrlShortener implements UrlShortenerService {
             }
             startCalled = true;
             try {
-                Path dataDir = Files.createTempDirectory("nickmish-urlshortener");
-                FileStringDao links = new FileStringDao(dataDir.resolve("links"));
-                linkDao = links;
-                FileStringDao users = new FileStringDao(dataDir.resolve("users"));
-                userDao = users;
+                Path dataDir = Files.createTempDirectory("nickmish-kv");
+                FileByteArrayDao dao = new FileByteArrayDao(dataDir);
+                this.dao = dao;
                 HttpServer httpServer = HttpServer.create(new InetSocketAddress("localhost", port), 0);
                 server = httpServer;
                 ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
                 executor = workers;
                 httpServer.setExecutor(workers);
-                Dao<String> linksStorage = injectedLinksDao != null ? injectedLinksDao : links;
-                httpServer.createContext("/", new UrlShortenerHandler(
-                        port,
-                        new LinkService(linksStorage),
-                        new UserService(users),
-                        new BasicAuthenticator(users),
-                        () -> links.isAvailable() && users.isAvailable()));
+                httpServer.createContext("/", new KVHandler(dao, dao::isAvailable));
                 httpServer.start();
             } catch (IOException | RuntimeException e) {
                 try {
@@ -76,7 +53,7 @@ public final class UrlShortener implements UrlShortenerService {
                 } catch (RuntimeException ee) {
                     e.addSuppressed(ee);
                 }
-                throw new IllegalStateException("Cannot start URL shortener on port " + port, e);
+                throw new IllegalStateException("Cannot start KV service on port " + port, e);
             }
         } finally {
             lock.unlock();
@@ -98,18 +75,16 @@ public final class UrlShortener implements UrlShortenerService {
     }
 
     private void closeResources() {
-        FileStringDao links = linkDao;
-        FileStringDao users = userDao;
+        Dao<byte[]> dao = this.dao;
         ExecutorService workers = executor;
-        try (links;
-                users;
+        try (dao;
                 workers) {
             HttpServer httpServer = server;
             if (httpServer != null) {
                 httpServer.stop(1);
             }
         } catch (IOException e) {
-            throw new UncheckedIOException("Cannot close URL shortener storage", e);
+            throw new UncheckedIOException("Cannot close KV service storage", e);
         }
     }
 }
