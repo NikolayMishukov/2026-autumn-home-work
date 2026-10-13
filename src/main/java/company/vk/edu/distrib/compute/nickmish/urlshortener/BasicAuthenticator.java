@@ -32,9 +32,6 @@ public final class BasicAuthenticator {
             return false;
         }
         String base64 = header.substring(BASIC_PREFIX_LENGTH);
-        if (base64.isEmpty()) {
-            return false;
-        }
         String decoded;
         try {
             byte[] bytes = Base64.getDecoder().decode(base64);
@@ -43,14 +40,11 @@ public final class BasicAuthenticator {
             return false;
         }
         int sep = decoded.indexOf(SEPARATOR);
-        if (sep <= 0 || sep == decoded.length() - 1) {
+        if (sep < 0) {
             return false;
         }
         String username = decoded.substring(0, sep);
         String password = decoded.substring(sep + 1);
-        if (password.isEmpty()) {
-            return false;
-        }
         try {
             String storedPassword = users.get(username);
             return MessageDigest.isEqual(
