@@ -5,6 +5,7 @@ import company.vk.edu.distrib.compute.Dao;
 import java.io.IOException;
 
 public final class UserService {
+    private static final char SEPARATOR = ':';
     private final Dao<String> users;
 
     public UserService(Dao<String> users) {
@@ -12,7 +13,7 @@ public final class UserService {
     }
 
     public void register(String credentials) throws IOException {
-        int sep = credentials.indexOf(':');
+        int sep = credentials.indexOf(SEPARATOR);
         if (sep < 0) {
             throw new IllegalArgumentException("Credentials must be in format 'username:password'");
         }

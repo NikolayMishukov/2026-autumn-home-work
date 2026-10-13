@@ -1,6 +1,7 @@
 package company.vk.edu.distrib.compute.nickmish.kv;
 
 import company.vk.edu.distrib.compute.Dao;
+import company.vk.edu.distrib.compute.nickmish.HttpStatus;
 import company.vk.edu.distrib.compute.kv.RemoteDaoFactory;
 import company.vk.edu.distrib.compute.kv.RemoteDaoFactoryTest;
 import org.jspecify.annotations.NullMarked;
@@ -18,23 +19,6 @@ import java.util.NoSuchElementException;
 @NullMarked
 public final class RemoteDaoFactoryImpl implements RemoteDaoFactory<String> {
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
-
-    private enum HttpStatus {
-        OK(200),
-        CREATED(201),
-        ACCEPTED(202),
-        NOT_FOUND(404);
-
-        private final int code;
-
-        HttpStatus(int code) {
-            this.code = code;
-        }
-
-        int code() {
-            return code;
-        }
-    }
 
     @Override
     public Dao<String> create(int... ports) throws IOException {

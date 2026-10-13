@@ -3,6 +3,7 @@ package company.vk.edu.distrib.compute.nickmish.kv;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import company.vk.edu.distrib.compute.Dao;
+import company.vk.edu.distrib.compute.nickmish.HttpStatus;
 
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -32,9 +33,9 @@ public final class KVHandler implements HttpHandler {
             Response response = process(exchange);
             exchange.getResponseHeaders().set("Content-Type", CONTENT_TYPE);
             if (response.body().length == 0) {
-                exchange.sendResponseHeaders(response.status(), -1);
+                exchange.sendResponseHeaders(response.status().code(), -1);
             } else {
-                exchange.sendResponseHeaders(response.status(), response.body().length);
+                exchange.sendResponseHeaders(response.status().code(), response.body().length);
                 exchange.getResponseBody().write(response.body());
             }
         }
@@ -44,11 +45,11 @@ public final class KVHandler implements HttpHandler {
         try {
             return route(exchange);
         } catch (NoSuchElementException e) {
-            return new Response(404, new byte[0]);
+            return new Response(HttpStatus.NOT_FOUND, new byte[0]);
         } catch (IllegalArgumentException e) {
-            return new Response(400, new byte[0]);
+            return new Response(HttpStatus.BAD_REQUEST, new byte[0]);
         } catch (IOException e) {
-            return new Response(503, new byte[0]);
+            return new Response(HttpStatus.SERVICE_UNAVAILABLE, new byte[0]);
         }
     }
 
@@ -64,24 +65,26 @@ public final class KVHandler implements HttpHandler {
             return entity(exchange, method);
         }
 
-        return new Response(404, new byte[0]);
+        return new Response(HttpStatus.NOT_FOUND, new byte[0]);
     }
 
     private Response status(HttpExchange exchange, String method) {
         if (!GET.equals(method)) {
             return methodNotAllowed(exchange, "GET");
         }
-        return available.getAsBoolean() ? new Response(200, new byte[0]) : new Response(503, new byte[0]);
+        return available.getAsBoolean()
+                ? new Response(HttpStatus.OK, new byte[0])
+                : new Response(HttpStatus.SERVICE_UNAVAILABLE, new byte[0]);
     }
 
     private Response entity(HttpExchange exchange, String method) throws IOException {
         String query = exchange.getRequestURI().getRawQuery();
         if (query == null || !query.startsWith("id=")) {
-            return new Response(400, new byte[0]);
+            return new Response(HttpStatus.BAD_REQUEST, new byte[0]);
         }
         String id = URLDecoder.decode(query.substring(3), StandardCharsets.UTF_8);
         if (id.isEmpty()) {
-            return new Response(400, new byte[0]);
+            return new Response(HttpStatus.BAD_REQUEST, new byte[0]);
         }
 
         return switch (method) {
@@ -89,11 +92,11 @@ public final class KVHandler implements HttpHandler {
             case PUT -> {
                 byte[] body = readBody(exchange);
                 dao.upsert(id, body);
-                yield new Response(201, new byte[0]);
+                yield new Response(HttpStatus.CREATED, new byte[0]);
             }
             case DELETE -> {
                 dao.delete(id);
-                yield new Response(202, new byte[0]);
+                yield new Response(HttpStatus.ACCEPTED, new byte[0]);
             }
             default -> methodNotAllowed(exchange, "GET, PUT, DELETE");
         };
@@ -102,21 +105,21 @@ public final class KVHandler implements HttpHandler {
     private Response get(String id) throws IOException {
         try {
             byte[] value = dao.get(id);
-            return new Response(200, value);
+            return new Response(HttpStatus.OK, value);
         } catch (NoSuchElementException e) {
-            return new Response(404, new byte[0]);
+            return new Response(HttpStatus.NOT_FOUND, new byte[0]);
         }
     }
 
     private static Response methodNotAllowed(HttpExchange exchange, String methods) {
         exchange.getResponseHeaders().set("Allow", methods);
-        return new Response(405, new byte[0]);
+        return new Response(HttpStatus.METHOD_NOT_ALLOWED, new byte[0]);
     }
 
     private static byte[] readBody(HttpExchange exchange) throws IOException {
         return exchange.getRequestBody().readAllBytes();
     }
 
-    private record Response(int status, byte[] body) {
+    private record Response(HttpStatus status, byte[] body) {
     }
 }

@@ -3,8 +3,6 @@ package company.vk.edu.distrib.compute.nickmish.urlshortener.utils;
 import java.security.SecureRandom;
 
 public final class IdGeneratorUtils {
-    private static final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    private static final int ID_LENGTH = 10;
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private IdGeneratorUtils() {
@@ -12,9 +10,9 @@ public final class IdGeneratorUtils {
     }
 
     public static String generate() {
-        StringBuilder sb = new StringBuilder(ID_LENGTH);
-        for (int i = 0; i < ID_LENGTH; i++) {
-            sb.append(ALPHABET.charAt(RANDOM.nextInt(ALPHABET.length())));
+        StringBuilder sb = new StringBuilder(IdConstants.ID_LENGTH);
+        for (int i = 0; i < IdConstants.ID_LENGTH; i++) {
+            sb.append(IdConstants.ALPHABET.charAt(RANDOM.nextInt(IdConstants.ALPHABET.length())));
         }
         return sb.toString();
     }

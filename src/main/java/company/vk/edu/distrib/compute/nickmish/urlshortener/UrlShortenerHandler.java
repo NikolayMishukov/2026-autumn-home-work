@@ -2,6 +2,7 @@ package company.vk.edu.distrib.compute.nickmish.urlshortener;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import company.vk.edu.distrib.compute.nickmish.HttpStatus;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -18,6 +19,9 @@ public final class UrlShortenerHandler implements HttpHandler {
     private static final String USERS_PATH = "/internal/users";
     private static final String LINKS_PATH = "/v0/links/";
     private static final String CONTENT_TYPE = "text/html; charset=utf-8";
+    private static final String ALLOW_GET = "GET";
+    private static final String ALLOW_POST = "POST";
+    private static final String ALLOW_GET_PUT_DELETE = "GET, PUT, DELETE";
 
     private final String shortLinkPrefix;
     private final LinkService links;
@@ -47,10 +51,10 @@ public final class UrlShortenerHandler implements HttpHandler {
                 exchange.getResponseHeaders().set("Location", response.location());
             }
             if (response.body().isEmpty()) {
-                exchange.sendResponseHeaders(response.status(), -1);
+                exchange.sendResponseHeaders(response.statusCode(), -1);
             } else {
                 byte[] body = response.body().getBytes(StandardCharsets.UTF_8);
-                exchange.sendResponseHeaders(response.status(), body.length);
+                exchange.sendResponseHeaders(response.statusCode(), body.length);
                 exchange.getResponseBody().write(body);
             }
         }
@@ -60,11 +64,11 @@ public final class UrlShortenerHandler implements HttpHandler {
         try {
             return route(exchange);
         } catch (NoSuchElementException e) {
-            return new Response(404);
+            return new Response(HttpStatus.NOT_FOUND);
         } catch (IllegalArgumentException e) {
-            return new Response(422);
+            return new Response(HttpStatus.UNPROCESSABLE_CONTENT);
         } catch (IOException e) {
-            return new Response(503);
+            return new Response(HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 
@@ -86,7 +90,7 @@ public final class UrlShortenerHandler implements HttpHandler {
 
         if (!auth.authenticate(exchange.getRequestHeaders())) {
             exchange.getResponseHeaders().set("WWW-Authenticate", auth.getChallenge());
-            return new Response(401);
+            return new Response(HttpStatus.UNAUTHORIZED);
         }
 
         return routeLinks(exchange, path, method, isRedirectPath);
@@ -94,22 +98,24 @@ public final class UrlShortenerHandler implements HttpHandler {
 
     private Response status(HttpExchange exchange, String method) {
         if (!GET.equals(method)) {
-            return methodNotAllowed(exchange, "GET");
+            return methodNotAllowed(exchange, ALLOW_GET);
         }
-        return available.getAsBoolean() ? new Response(200) : new Response(503);
+        return available.getAsBoolean()
+                ? new Response(HttpStatus.OK)
+                : new Response(HttpStatus.SERVICE_UNAVAILABLE);
     }
 
     private Response registerUser(HttpExchange exchange, String method) throws IOException {
         if (!POST.equals(method)) {
-            return methodNotAllowed(exchange, "POST");
+            return methodNotAllowed(exchange, ALLOW_POST);
         }
         users.register(readBody(exchange));
-        return new Response(200);
+        return new Response(HttpStatus.OK);
     }
 
     private Response redirect(String id) throws IOException {
         String longLink = links.get(id);
-        return new Response(301, "", longLink);
+        return new Response(HttpStatus.MOVED_PERMANENTLY, "", longLink);
     }
 
     private Response routeLinks(
@@ -121,38 +127,38 @@ public final class UrlShortenerHandler implements HttpHandler {
         if ("/v0/links".equals(path)) {
             if (POST.equals(method)) {
                 String id = links.create(readBody(exchange));
-                return new Response(201, shortLinkPrefix + id);
+                return new Response(HttpStatus.CREATED, shortLinkPrefix + id);
             }
-            return methodNotAllowed(exchange, "POST");
+            return methodNotAllowed(exchange, ALLOW_POST);
         }
         if (path.startsWith(LINKS_PATH)) {
             String id = path.substring(LINKS_PATH.length());
             return accessLink(exchange, id, method);
         }
         if (isRedirectPath) {
-            return methodNotAllowed(exchange, "GET");
+            return methodNotAllowed(exchange, ALLOW_GET);
         }
-        return new Response(404);
+        return new Response(HttpStatus.NOT_FOUND);
     }
 
     private Response accessLink(HttpExchange exchange, String id, String method) throws IOException {
         return switch (method) {
-            case GET -> new Response(200, links.get(id));
+            case GET -> new Response(HttpStatus.OK, links.get(id));
             case PUT -> {
                 links.update(id, readBody(exchange));
-                yield new Response(200);
+                yield new Response(HttpStatus.OK);
             }
             case DELETE -> {
                 links.delete(id);
-                yield new Response(202);
+                yield new Response(HttpStatus.ACCEPTED);
             }
-            default -> methodNotAllowed(exchange, "GET, PUT, DELETE");
+            default -> methodNotAllowed(exchange, ALLOW_GET_PUT_DELETE);
         };
     }
 
     private static Response methodNotAllowed(HttpExchange exchange, String methods) {
         exchange.getResponseHeaders().set("Allow", methods);
-        return new Response(405);
+        return new Response(HttpStatus.METHOD_NOT_ALLOWED);
     }
 
     private static String readBody(HttpExchange exchange) throws IOException {
